@@ -1,0 +1,99 @@
+stages:
+    - build
+    - unitTests
+    - test
+
+variables:
+  PROJECT_NAME: "app"
+  BINARY_PATH: "bin"
+  TESTS_NAME: "tests"
+  INPUT_FILE_PATH: "/home/gitlab-runner/ADS/FSM_comment_remover"
+
+cache: &global_cache
+  key: assets
+  paths:
+    - $BINARY_PATH/test_files
+  policy: pull-push
+
+linux:
+  tags:
+    - seminars
+  stage: build
+  
+  script: 
+    - cmake CMakeLists.txt
+    - make
+
+  cache:
+    <<: *global_cache
+    policy: push
+
+    
+  artifacts:
+    paths:
+      - $BINARY_PATH/$PROJECT_NAME
+      - $BINARY_PATH/$TESTS_NAME
+    when: always
+
+win:
+  tags:
+    - seminars
+
+  stage: build
+  allow_failure: true
+
+  script:
+    - i686-w64-mingw32.static-cmake CMakeLists.txt
+    - make
+
+  artifacts:
+    paths:
+      - $BINARY_PATH/$PROJECT_NAME.exe
+      - $BINARY_PATH/$TESTS_NAME.exe
+
+  cache: {} # disable cache
+
+unitTesting:
+  tags:
+    - seminars
+  stage: unitTests
+
+  variables:
+    UT_NAME: "unitTestOutput.txt"
+  
+  script:
+    - cd $BINARY_PATH
+    - ./$TESTS_NAME | tee $UT_NAME
+    - (! grep -q "FAILED TESTS" $UT_NAME)
+    
+  artifacts:
+    paths:
+      - $BINARY_PATH/$UT_NAME
+    when: always
+
+  cache:
+    <<: *global_cache
+    policy: pull
+      
+integrationTest1:
+  tags:
+    - seminars
+  stage: test
+  
+  script:
+    - cd $BINARY_PATH
+    - valgrind --log-file=valgrindOutput1.txt ./$PROJECT_NAME < $INPUT_FILE_PATH/input1.txt | tee output1.txt
+    - diff output1.txt $INPUT_FILE_PATH/expectedOutput1.txt | tee diffOutput1.diff
+    - grep -q "no leaks are possible" valgrindOutput1.txt
+    - cmp output1.txt $INPUT_FILE_PATH/expectedOutput1.txt
+    
+  artifacts:
+    paths:
+      - $BINARY_PATH/output1.txt
+      - $BINARY_PATH/diffOutput1.diff
+      - $BINARY_PATH/valgrindOutput1.txt
+    when: always
+    
+  cache:
+    <<: *global_cache
+    policy: pull
